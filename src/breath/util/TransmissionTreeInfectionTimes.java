@@ -14,19 +14,20 @@ import beast.base.inference.Runnable;
 import beastfx.app.tools.Application;
 import beastfx.app.treeannotator.TreeAnnotator;
 import beastfx.app.treeannotator.TreeAnnotator.MemoryFriendlyTreeSet;
-import beastfx.app.util.OutFile;
+//import beastfx.app.util.OutFile;
 import beastfx.app.util.TreeFile;
 
 @Description("Convert transmission tree log into bar plot with transmission times")
-public class TransmissionTreeInfectionTimes extends Runnable {	
-	final public Input<TreeFile> srcInput = new Input<>("in", "source tree (set) file with transmission tree annotations");
-	final public Input<String> partitionInput = new Input<>("partition", "name of the partition appended to `blockcount, blockend and blockstart`");
+public class TransmissionTreeInfectionTimes extends Runnable {
+	final public Input<TreeFile> srcInput = new Input<>("in", "source tree (set) file with " +
+			"transmission tree annotations", Input.Validate.REQUIRED);
+	final public Input<String> partitionInput = new Input<>("partition", "name of the partition appended to `blockcount, blockend and blockstart`", "dna");
 	final public Input<Function> endTimeInput = new Input<>("endTime", "end time of the study", new Constant("1.0"));
-	final public Input<OutFile> pngFileInput = new Input<>("png", "name of file to write bar-chart plot", new OutFile("[[none]]"));	
+//	final public Input<OutFile> pngFileInput = new Input<>("png", "name of file to write bar-chart plot", new OutFile("[[none]]"));
 
-	
 	@Override
 	public void initAndValidate() {
+		srcInput.validate();
 	}
 
 	double endTime;
@@ -34,20 +35,17 @@ public class TransmissionTreeInfectionTimes extends Runnable {
 	public void run() throws Exception {
 		endTime = endTimeInput.get().getArrayValue();
 		double [] bins = new double[100];
-		
 
         // read trees one by one, adjust tip heights and write out relabeled tree in newick format
         MemoryFriendlyTreeSet trees = new TreeAnnotator().new MemoryFriendlyTreeSet(srcInput.get().getAbsolutePath(), 0);
         trees.reset();
     	Tree tree = trees.next();
     	int n = tree.getLeafNodeCount();
-    	
-    	
-    	
+
         trees.reset();
         while (trees.hasNext()) {
         	tree = trees.next();
-        	
+
         	// extract meta data from tree
         	Double [] start = new Double[n*2-1];
         	Double [] end = new Double[n*2-1];
@@ -71,14 +69,14 @@ public class TransmissionTreeInfectionTimes extends Runnable {
         			o = node.getMetaData("blockend.t:" + partitionInput.get());
         		}
         		end[i] = (Double) o;
-        		        		
+
         		o = node.getMetaData("blockcount");
         		if (o == null) {
         			o = node.getMetaData("blockcount.t:" + partitionInput.get());
         		}
         		count[i] = o == null ? 0 : (int)(double) o;
         	}
-        	
+
         	for (int i = 0; i < n*2-1; i++) {
         		int c = count[i];
         		Node node = tree.getNode(i);
@@ -87,11 +85,11 @@ public class TransmissionTreeInfectionTimes extends Runnable {
         		} else if (c > 0) {
         			for (int j = 0; j <= count[i]; j++) {
             			add(node.getHeight() + node.getLength() * (start[i] + j * (end[i]-start[i])/count[i]), bins);
-        			}	
-        		}
-        	}
-        }
-        
+					}
+				}
+			}
+		}
+
         double sum = 0;
         for (double d : bins) {
         	sum += d;
@@ -99,10 +97,10 @@ public class TransmissionTreeInfectionTimes extends Runnable {
         for (int i = 0; i < bins.length; i++) {
         	bins[i] /= sum;
         }
-        
+
         System.out.println(Arrays.toString(bins));
-        
-        
+
+
         Log.warning("Done");
 	}
 

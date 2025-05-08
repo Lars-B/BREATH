@@ -22,16 +22,17 @@ import breath.distribution.ColourProvider;
 @Description("Convert transmission tree log into trace log with who infected who. "
 		+ "If leaf i is infected by leaf j, the log contains j at position i. "
 		+ "If leaf is infected by an unsampled node, the log contains -1.")
-public class TransmissionTree2InfectorOfLog extends Runnable {	
-	final public Input<TreeFile> srcInput = new Input<>("in", "source tree (set) file with transmission tree annotations");
+public class TransmissionTree2InfectorOfLog extends Runnable {
+	final public Input<TreeFile> srcInput = new Input<>("in", "source tree (set) file with transmission tree annotations", Input.Validate.REQUIRED);
 	final public Input<OutFile> outputInput = new Input<>("out", "output file, or stdout if not specified", new OutFile("[[none]]"));
 	final public Input<OutFile> outputTypeInput = new Input<>("types", "output file with type information for CoverageCalculator, ignored if not specified", new OutFile("[[none]]"));
-	final public Input<String> partitionInput = new Input<>("partition", "name of the partition appended to `blockcount, blockend and blockstart`");
+	final public Input<String> partitionInput = new Input<>("partition", "name of the partition appended to `blockcount, blockend and blockstart`", "dna");
 	final public Input<Boolean> directOnlyInput = new Input<>("directOnly", "consider direct infections only, if false block counts are ignored", true);
 
-	
+
 	@Override
 	public void initAndValidate() {
+		srcInput.validate();
 	}
 
 	@Override
@@ -47,9 +48,9 @@ public class TransmissionTree2InfectorOfLog extends Runnable {
         trees.reset();
     	Tree tree = trees.next();
     	int n = tree.getLeafNodeCount();
-    	
+
     	printTypes(n, tree);
-    	
+
     	out.print("Sample\t");
     	for (int i = 0; i < n; i++) {
     		out.print("infectorOf."+tree.getNode(i).getID() + "\t");
@@ -66,13 +67,13 @@ public class TransmissionTree2InfectorOfLog extends Runnable {
     	out.print("infectionCount\t");
     	out.println();
 
-    	
+
         trees.reset();
         int k = 0;
         boolean directOnly = directOnlyInput.get();
         while (trees.hasNext()) {
         	tree = trees.next();
-        	
+
         	// extract meta data from tree
         	Double [] start = new Double[n*2-1];
         	Double [] end = new Double[n*2-1];
@@ -82,13 +83,13 @@ public class TransmissionTree2InfectorOfLog extends Runnable {
         		Object o = node.getMetaData("start");
         		if (o == null) {
         			o = node.getMetaData("blockstart");
-        		}
+				}
         		if (o == null) {
         			o = node.getMetaData("blockstart.t:" + partitionInput.get());
-        		}
+				}
         		if (o == null) {
-        			o = 0.5;
-        		}
+					o = 0.5;
+				}
         		start[i] = (Double) o;
 
         		o = node.getMetaData("end");
@@ -102,7 +103,7 @@ public class TransmissionTree2InfectorOfLog extends Runnable {
         			o = 0.5;
         		}
         		end[i] = (Double) o;
-        		        		
+
         		o = node.getMetaData("blockcount");
         		if (o == null) {
         			o = node.getMetaData("blockcount.t:" + partitionInput.get());
@@ -116,21 +117,21 @@ public class TransmissionTree2InfectorOfLog extends Runnable {
             // calculate colouring
         	int [] colourAtBase = new int[n*2-1];
         	ColourProvider.getColour(tree.getRoot(), blockCount, tree.getLeafNodeCount(), colourAtBase);
-        	
+
         	// determine who infected who
         	int [] infectedBy = new int[tree.getLeafNodeCount()];
         	Arrays.fill(infectedBy, -1);
         	for (int i = 0; i < 2 * n - 2; i++) {
         		Node node = tree.getNode(i);
         		Node parent = node.getParent();
-        		if (colourAtBase[node.getNr()] < n && colourAtBase[parent.getNr()] < n && 
+				if (colourAtBase[node.getNr()] < n && colourAtBase[parent.getNr()] < n &&
         				colourAtBase[node.getNr()] != colourAtBase[parent.getNr()]) {
         			if (!directOnly || blockCount.getValue(node.getNr()) == 0) {
         				infectedBy[colourAtBase[node.getNr()]] = colourAtBase[parent.getNr()];
         			}
         		}
         	}
-        	
+
         	// log the result
         	out.print(k + "\t");
         	for (int i = 0; i < n; i++) {
@@ -154,9 +155,7 @@ public class TransmissionTree2InfectorOfLog extends Runnable {
 
         	k++;
         }
-		
-		
-		
+
 		if (outputInput.get() != null && !outputInput.get().getName().equals("[[none]]")) {
 			out.close();
 		}
