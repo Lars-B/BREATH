@@ -59,6 +59,9 @@ public class InfectedByCoverageCalculator extends Runnable {
 
     @Override
     public void initAndValidate() {
+		logFilePrefixInput.validate();
+		truthInput.validate();
+		tagInput.validate();
     }
 
     @Override
