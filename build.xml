@@ -105,7 +105,7 @@
     </target>
 
     <target name="build-beast" depends="get-local-beast,get-remote-beast">
-        <javac 
+        <javac
             srcdir="${beast-source-root}/src"
             destdir="${build-beast}"
             source="${sourceVersion}"
@@ -117,7 +117,7 @@
                 <fileset dir="${beast-source-root}/lib" includes="**/*.jar"/>
             </classpath>
         </javac>
-        <javac 
+        <javac
             srcdir="${beast-source-root}/test"
             destdir="${build-beast}"
             source="${sourceVersion}"
@@ -378,6 +378,6 @@
 
 	<target name="install" depends="installWindows,installMac,installLinux">
 	</target>
-	
-	
+
+
 </project>
