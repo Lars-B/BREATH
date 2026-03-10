@@ -6,6 +6,7 @@ import java.util.List;
 import beast.base.core.Description;
 import beast.base.core.Input;
 import beast.base.core.Input.Validate;
+import beast.base.core.Log;
 import beast.base.evolution.tree.Node;
 import beast.base.evolution.tree.TreeInterface;
 import beast.base.inference.Operator;
@@ -84,20 +85,7 @@ public class BlockOperator extends Operator {
 
 	@Override
 	public double proposal() {
-//		if (true)
-//			if (Randomizer.nextBoolean()) {
-//				int [] i = chooseInfectionToRemove();
-//				if (i == null) {
-//					return Double.NEGATIVE_INFINITY;
-//				}
-//				return removeInfection0(i);
-//			} else {
-//				int k = chooseBlockToInsert();
-//				return insertInfection0(k);
-//			}
 
-		
-		
 		if (Randomizer.nextBoolean()) {
 			// move block boundaries for a branch that has a non-empty block
 			
@@ -325,7 +313,7 @@ public class BlockOperator extends Operator {
 			// add infection to block already containing 2 infections
 			// assume it goes inside the block, so no need to update block boundaries
 			blockCount.setValue(i, blockCount.getValue(i)+1);
-			
+
 		}
 
 		// calculate the number of infections that can be removed safely
@@ -339,15 +327,37 @@ public class BlockOperator extends Operator {
 		// HR = ----------------------------------------------------------------------------
 		//      probability density the infection gets inserted at this branch at this point
 		// return log(HR)		
-		double logBadd = Math.log(1.0/ eligibleInfectionCount)
-			   - Math.log(tree.getNode(i).getLength() / length);
+//		double logBadd = Math.log(1.0/ eligibleInfectionCount)
+//			   - Math.log(tree.getNode(i).getLength() / length);
+//		switch (blockCount.getValue(i)) {
+//		case 1: /* went from no to 1 transmission */
+//			return logBadd + Math.log(tree.getNode(i).getLength());
+//		case 2: /* went from 1 to 2 transmissions */
+//			return logBadd + Math.log(tree.getNode(i).getLength()) - Math.log(2);
+//		}
+//		return logBadd;
+		double logBadd = Math.log(1.0 / eligibleInfectionCount)
+				- Math.log(tree.getNode(i).getLength() / length);
+
+		double logHR = logBadd; // start with base
+
 		switch (blockCount.getValue(i)) {
-		case 1: /* went from no to 1 transmission */
-			return logBadd + Math.log(tree.getNode(i).getLength());
-		case 2: /* went from 1 to 2 transmissions */
-			return logBadd + Math.log(tree.getNode(i).getLength()) - Math.log(2);
+			case 1: /* went from no to 1 transmission */
+				logHR += Math.log(tree.getNode(i).getLength());
+				break;
+			case 2: /* went from 1 to 2 transmissions */
+				logHR += Math.log(tree.getNode(i).getLength()) - Math.log(2);
+				break;
 		}
-		return logBadd;
+
+		// optional: also log linear HR
+		double HR = Math.exp(logHR);
+
+		// log details
+		Log.debug(String.format("insertInfection: node=%d, lengthAtNode=%.5f, blockCount=%d, eligibleInfections=%d, logHR=%.5f, HR=%.5f",
+				i, tree.getNode(i).getLength(), blockCount.getValue(i), eligibleInfectionCount, logHR, HR));
+
+		return logHR;
 	} // insertInfection
 
 	private double removeInfection(int [] infection) {
@@ -395,41 +405,38 @@ public class BlockOperator extends Operator {
 		// HR = ----------------------------------------------------------------------------
 		//              probability this infection got selected for removal
 		// return log(HR)		
-		double logBrem = Math.log(tree.getNode(i).getLength() / length) 
+//		double logBrem = Math.log(tree.getNode(i).getLength() / length)
+//				+ Math.log(eligibleInfectionCount);
+//		switch (blockCount.getValue(i)) {
+//		case 0: /* went from 1 to no transmission */
+//			return logBrem - Math.log(tree.getNode(i).getLength());
+//		case 1: /* went from 2 to 1 transmission */
+//			return logBrem + Math.log(2.0) - Math.log(tree.getNode(i).getLength());
+//		}
+//		return logBrem;
+		double logBrem = Math.log(tree.getNode(i).getLength() / length)
 				+ Math.log(eligibleInfectionCount);
+
+		double logHR = logBrem; // base log HR
+
 		switch (blockCount.getValue(i)) {
-		case 0: /* went from 1 to no transmission */
-			return logBrem - Math.log(tree.getNode(i).getLength());
-		case 1: /* went from 2 to 1 transmission */
-			return logBrem + Math.log(2.0) - Math.log(tree.getNode(i).getLength());
+			case 0: /* went from 1 to no transmission */
+				logHR -= Math.log(tree.getNode(i).getLength());
+				break;
+			case 1: /* went from 2 to 1 transmission */
+				logHR += Math.log(2.0) - Math.log(tree.getNode(i).getLength());
+				break;
 		}
-		return logBrem;
-	} // removeInfection
 
+// optional: linear-space HR
+		double HR = Math.exp(logHR);
 
-	private double insertInfection0(int i) {
-			// add infection
-			blockCount.setValue(i, blockCount.getValue(i)+1);
-			double k = blockCount.getValue(i) + 2;
-			blockStartFraction.setValue(i, 1.0/k);
-			blockEndFraction.setValue(i, (k-1.0)/k);
-			return 0;
-	} // insertInfection
+// log details
+		Log.debug(String.format(
+				"removeInfection: node=%d, lengthAtNode=%.5f, blockCount=%d, eligibleInfections=%d, logHR=%.5f, HR=%.5f, newicktest= %s",
+				i, tree.getNode(i).getLength(), blockCount.getValue(i), eligibleInfectionCount, logHR, HR, tree.getNode(i).toNewick()));
 
-	private double removeInfection0(int [] infection) {
-		int i = infection[0];
-
-		int bc = blockCount.getValue(i);
-		if (bc == -1) {
-			throw new RuntimeException("Programmer error");
-		}
-		// remove infection
-		blockCount.setValue(i, blockCount.getValue(i)-1);
-
-		double k = blockCount.getValue(i) + 2;
-		blockStartFraction.setValue(i, 1.0/k);
-		blockEndFraction.setValue(i, (k-1.0)/k);
-		return 0;
+		return logHR;
 	} // removeInfection
 
 	@Override
