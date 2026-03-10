@@ -87,8 +87,6 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 	private double atr;
 	private double btr;
 
-	//private double a, b;
-
 	private boolean updateColours = true;
 	private boolean allowTransmissionsAfterSampling;
 	private boolean initialCalculation = true;
@@ -127,8 +125,6 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 
 		origin = originInput.get();
 
-
-
 		endTime = endTimeInput.get();
 		// lambda_tr = lambdaTrInput.get();
 		samplingHazard = samplingHazardInput.get();
@@ -139,15 +135,19 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 		atr = transmissionHazard.shapeInput.get().getArrayValue();
 		btr = transmissionHazard.getRate();
 
-		double f = getRetainedFrac(50000);
-		lambda = (Cs*f*Ctr + (1-Cs)*Ctr) ;
-		
+		double retainedFrac = getRetainedFrac(50000);
+		Log.debug("This is the retainedFrac: " + retainedFrac);
+
+		lambda = (Cs*retainedFrac*Ctr + (1-Cs)*Ctr);
+
+		Log.debug("This is the Cs: " + Cs + " And the lambda: " + lambda);
 		Log.info("inferred lambda = " + lambda + " = Ctr * " + (lambda/Ctr));
+
 		if (lambdaTrInput.get() != null) {
 			lambda = lambdaTrInput.get();
 			Log.info("user specified lambda = " + lambda + " = Ctr * " + (lambda/Ctr));
 		}
-		
+
 		p0 = getp0(Cs, lambda, 0.1);
 		phi = getPhi(Cs, lambda, p0);
 		rho = getRho(phi);
@@ -158,34 +158,23 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 		originBranchLengthThreshold = originBranchLengthThresholdInput.get();
 	}
 
-	private double getRetainedFrac(int numSamps) {
-		double f = 0;
+	private double getRetainedFrac(int numSamples) {
+		int retained = 0;
 
-		double mean = 0;
-		double x2 = 0;
-
-		for (int i = 0; i < numSamps; i++) {
-			double tInf;
-			try {
-				tInf = transmissionHazard.simulate();
+		try {
+			for (int i = 0; i < numSamples; i++) {
+				double tInf = transmissionHazard.simulate();
 				double tSam = samplingHazard.simulate();
-				if ( tInf < tSam) {
-					f++;
-				} else {
-					mean += tInf;
-					x2 += tInf * tInf;
-				}
-			} catch (MathException e) {
-				e.printStackTrace();
-			}
-		}
-		mean /= (numSamps-f);
-		x2 /= (numSamps-f);
-		double var = x2 - mean*mean;
-//    	b = mean / var;
-//    	a = mean * b;
 
-		return f / numSamps;
+				if (tInf < tSam) {
+					retained++;
+				}
+			}
+		} catch (MathException e) {
+			throw new RuntimeException("Error simulating hazards", e);
+		}
+
+		return (double) retained / numSamples;
 	}
 
 	private void sanityCheck(RealParameter blockFraction, int n, String paramName) {
@@ -228,6 +217,17 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 			logP = Double.NEGATIVE_INFINITY;
 			return logP;
 		}
+
+//		int n = tree.getLeafNodeCount();
+//		This check would be used if the package works as it should for Cs = 1...
+//		if (Cs > 0.999999) {
+//			for (int c : colourAtBase) {
+//				if (c > n) {
+//					Log.debug(">>>>>>>>>> Color at Base is: "+ c);
+//					return Double.NEGATIVE_INFINITY;
+//				}
+//			}
+//		}
 
 		if (!validator.isValid(colourAtBase)) {
 			logP = Double.NEGATIVE_INFINITY;
@@ -1236,15 +1236,4 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 
 		return logP;
 	}
-
-
-//	public static void main(String[] args) {
-//		TransmissionTreeLikelihood3 tl = new TransmissionTreeLikelihood3();
-//		double Ctr=1.5;
-//		double Cs=0.9; // Cs must now be strictly less than 1
-//		double p0 = tl.getp0(Cs, Ctr, 0.1);
-//		System.err.println("Root found: " + p0);
-//		System.err.println("Function value at root: " + tl.f(p0, Cs, Ctr));
-//		System.err.println("Number of iterations: " + tl.n);
-//	}
 }
