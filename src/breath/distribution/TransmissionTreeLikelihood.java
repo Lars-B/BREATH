@@ -1054,7 +1054,7 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 
 	final static double tol2=1e-7;
 	final static int maxn = 1000000;
-	private double getBlockCondition(double p0, double rho, double atr, double btr, double Yr) {
+	private double getBlockCondition(double rho, double atr, double btr, double Yr) {
 		double Z =0;// # init for the sum
 		int n=1;
 		double term = 1; // initialize the term at something > tol
@@ -1063,18 +1063,15 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 			Z = Z+term;
 			n=n+1;
 		}
-//	    if (output==TRUE) {
-//	        cat("Approximate sum:", Z, "\n")
-//	        cat("Number of terms used:", n, "\n") 
-//	        } 
 		return Z;
 	}
 
 	private double getLogBlockLike(double tblock, int n, double Yr) {
-		double blockLike = (FastMath.pow(1-rho, n)) * dgamma(tblock, n*atr, btr) / getBlockCondition(p0,rho, atr, btr, Yr);
-//	    double blockLike = (1-FastMath.pow(rho,n)) * dgamma(tblock, n*a, b) / getBlockCondition(p0,rho, a, b, Yr);
+		double blockLike =
+				(FastMath.pow(1-rho, n)) *
+						dgamma(tblock, n*atr, btr) /
+						getBlockCondition(rho, atr, btr, Yr);
 		double logBlockLike = FastMath.log(blockLike);
-//	    System.err.println("blockLike(" +tblock+"," + n +"," + Yr+") = " + blockLike);
 		return logBlockLike;
 	}
 
