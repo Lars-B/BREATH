@@ -47,14 +47,11 @@ public class InfectionMover extends Operator {
     @Override
     public double proposal() {
 
-//        Log.debug("transmissionInfectionMover operator selected for proposal.");
-
         if (false) {
             // randomly pick internal node
             int nodeNr = Randomizer.nextInt(tree.getNodeCount() - 1);
             if (blockCount.getArrayValue(nodeNr) < 0) {
                 // immediate reject if there is no infection
-                Log.debug("false:reject: blockcount");
                 return Double.NEGATIVE_INFINITY;
             }
             // remove infection
@@ -71,7 +68,6 @@ public class InfectionMover extends Operator {
             Validator validator = new Validator((Tree) tree, colourAtBase, blockCount, blockStartFraction, blockEndFraction);
             if (!validator.isValid(colourAtBase)) {
                 // immediate reject if colouring is invalid
-                Log.debug("false:reject: invalid coloring");
                 return Double.NEGATIVE_INFINITY;
             }
 
@@ -83,10 +79,16 @@ public class InfectionMover extends Operator {
                 // move infection to its sibling
 
                 // randomly pick internal node
-                int nodeNr = Randomizer.nextInt(tree.getNodeCount() - 1);
+                int eligibleNodesBefore = 0;
+                for(int i = 0; i < tree.getNodeCount()-1; i++) {
+                    if(blockCount.getArrayValue(i) >= 0){
+                        eligibleNodesBefore++;
+                    }
+                }
+
+                int nodeNr = Randomizer.nextInt(tree.getNodeCount()-1);
                 if (blockCount.getArrayValue(nodeNr) < 0) {
                     // immediate reject if there is no infection
-                    Log.debug("Rejecting because of blockcount");
                     return Double.NEGATIVE_INFINITY;
                 }
                 // remove infection
@@ -104,24 +106,30 @@ public class InfectionMover extends Operator {
                 Validator validator = new Validator((Tree) tree, colourAtBase, blockCount, blockStartFraction, blockEndFraction);
                 if (!validator.isValid(colourAtBase)) {
                     // immediate reject if colouring is invalid
-                    Log.debug("Rejecting because of invalid transmission tree");
                     return Double.NEGATIVE_INFINITY;
                 }
 
-                double logHR = 0;
+                int eligibleNodesAfter = 0;
+                for(int i = 0; i < tree.getNodeCount()-1; i++) {
+                    if(blockCount.getArrayValue(i) >= 0){
+                        eligibleNodesAfter++;
+                    }
+                }
+
+                double logHR = Math.log(eligibleNodesBefore) - Math.log(eligibleNodesAfter);
                 if (blockCount.getArrayValue(source.getNr()) < 0) {
                     double l = useBranchLength ? source.getLength() : 1;
                     logHR += Math.log(1 / l);
                 } else if (blockCount.getArrayValue(source.getNr()) == 0) {
                     double l = useBranchLength ? source.getLength() : 1;
-                    logHR += Math.log(2 / (l * l));
+                    logHR += Math.log(2 / l);
                 }
                 if (blockCount.getArrayValue(target.getNr()) == 0) {
                     double l = useBranchLength ? target.getLength() : 1;
                     logHR += -Math.log(1 / l);
                 } else if (blockCount.getArrayValue(target.getNr()) == 1) {
                     double l = useBranchLength ? target.getLength() : 1;
-                    logHR += -Math.log(2 / (l * l));
+                    logHR += -Math.log(2 / l);
                 }
 
 
@@ -136,10 +144,16 @@ public class InfectionMover extends Operator {
                 // move infection anywhere in the tree
 
                 // randomly pick internal node
+                int eligibleNodesBefore = 0;
+                for(int i = 0; i < tree.getNodeCount()-1; i++) {
+                    if(blockCount.getArrayValue(i) >= 0){
+                        eligibleNodesBefore++;
+                    }
+                }
+
                 int nodeNr = Randomizer.nextInt(tree.getNodeCount() - 1);
                 if (blockCount.getArrayValue(nodeNr) < 0) {
                     // immediate reject if there is no infection
-                    Log.debug("Because no infection");
                     return Double.NEGATIVE_INFINITY;
                 }
                 // remove infection
@@ -159,24 +173,30 @@ public class InfectionMover extends Operator {
                 Validator validator = new Validator((Tree) tree, colourAtBase, blockCount, blockStartFraction, blockEndFraction);
                 if (!validator.isValid(colourAtBase)) {
                     // immediate reject if colouring is invalid
-                    Log.debug("Rejecting because of invalid transmission tree");
                     return Double.NEGATIVE_INFINITY;
                 }
 
-                double logHR = 0;
+                int eligibleNodesAfter = 0;
+                for(int i = 0; i < tree.getNodeCount()-1; i++) {
+                    if(blockCount.getArrayValue(i) >= 0){
+                        eligibleNodesAfter++;
+                    }
+                }
+
+                double logHR = Math.log(eligibleNodesBefore) - Math.log(eligibleNodesAfter);
                 if (blockCount.getArrayValue(source.getNr()) < 0) {
                     double l = useBranchLength ? source.getLength() : 1;
                     logHR += Math.log(1 / l);
                 } else if (blockCount.getArrayValue(source.getNr()) == 0) {
                     double l = useBranchLength ? source.getLength() : 1;
-                    logHR += Math.log(2 / (l * l));
+                    logHR += Math.log(2 / l);
                 }
                 if (blockCount.getArrayValue(target.getNr()) == 0) {
                     double l = useBranchLength ? target.getLength() : 1;
                     logHR -= Math.log(1 / l);
                 } else if (blockCount.getArrayValue(target.getNr()) == 1) {
                     double l = useBranchLength ? target.getLength() : 1;
-                    logHR -= Math.log(2 / (l * l));
+                    logHR -= Math.log(2 / l);
                 }
                 logHR += Math.log(source.getLength()) - Math.log(target.getLength());
 
@@ -215,7 +235,6 @@ public class InfectionMover extends Operator {
         Node nodeWithInfectionRemoved = removeInfectionFromPath(path, k);
 
         if (nodeWithInfectionRemoved.isRoot()) {
-            Log.debug("Removing node that is the root");
             return Double.NEGATIVE_INFINITY;
         }
 
@@ -244,7 +263,6 @@ public class InfectionMover extends Operator {
         Validator validator = new Validator((Tree) tree, colourAtBase, blockCount, blockStartFraction, blockEndFraction);
         if (!validator.isValid(colourAtBase)) {
             // System.err.println("x");
-            Log.info("Rejected: Invalid color at base?");
             return Double.NEGATIVE_INFINITY;
         }
 
@@ -294,12 +312,9 @@ public class InfectionMover extends Operator {
                     return node;
                 }
                 if (blockCount.getValue(nodeNr) == 0) {
-                    if (Randomizer.nextBoolean()) {
-                        blockStartFraction.setValue(nodeNr, blockEndFraction.getValue(nodeNr));
-                    } else {
-                        blockEndFraction.setValue(nodeNr, blockStartFraction.getValue(nodeNr));
-
-                    }
+                    double f = Randomizer.nextDouble();
+                    blockStartFraction.setValue(nodeNr, f);// / node.getLength());
+                    blockEndFraction.setValue(nodeNr, f);// / node.getLength());
                     return node;
                 }
 
