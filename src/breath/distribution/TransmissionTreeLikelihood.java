@@ -152,6 +152,8 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 		phi = getPhi(Cs, lambda, p0);
 		rho = getRho(phi);
 
+		Log.debug("p0: " + p0 + ", phi: " + phi + ", rho: " + rho);
+
 		allowTransmissionsAfterSampling = allowTransmissionsAfterSamplingInput.get();
 		conditionOnInfectionTime = conditionOnInfectionTimeInput.get();
 		branchLengthThreshold = branchLengthThresholdInput.get();
@@ -1004,25 +1006,19 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 	// here f = x- (1-C)*exp(lambda(x-1)) and f' is 1- (1-C)*lambda*exp(lambda(x-1))
 	final static int  maxsteps = 1000;
 	final static double tol=1e-6;
-	private int n=0;
 
 	private double f(double x, double Cs, double lambda) {
 		return x - (1-Cs)*FastMath.exp(lambda*(x-1));
 	}
 
-//	private double fprime(double x, double Cs, double Ctr) {
-//    	return 1 - (1-Cs)*Ctr*Math.exp(Ctr*(x-1));
-//    }
-
 	public double getp0(double Cs, double lambda, double x0) {
-		n=0;
+		int n = 0;
 		double f = f(x0, Cs, lambda);
 		while(Math.abs(f) > tol && n < maxsteps) {
-			//x0 = x0 - f(x0, Cs, Ctr) / fprime(x0, Cs, Ctr); // Newton's method formula
 			double tmp = (1-Cs)*FastMath.exp(lambda*(x0-1));
-			x0 = x0 -(x0-tmp)/(1-tmp*lambda);
+			x0 = x0 - (x0-tmp)/(1-tmp*lambda);
 			f = f(x0, Cs, lambda);
-			n=n+1;
+			n = n + 1;
 		}
 		if(n < maxsteps) {
 			return x0;
@@ -1045,6 +1041,10 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 	// recall p0 can be obtained with getp0(Cs,Ctr) 
 
 	private double getPhi(double Cs,double lambda,double p0) {
+		if (Cs == 1.0) {
+			// Otherwise the equation below returns NAN due to the division by 0.0 resulting in infinity.
+			return 1.0;
+		}
 		return(1 - p0*(1+ lambda*(1-p0)/(1-Cs)));
 	}
 
@@ -1067,6 +1067,9 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 	}
 
 	private double getLogBlockLike(double tblock, int n, double Yr) {
+		if (Cs == 1.0) {
+			return Double.NEGATIVE_INFINITY;
+		}
 		double blockLike =
 				(FastMath.pow(1-rho, n)) *
 						dgamma(tblock, n*atr, btr) /
@@ -1203,7 +1206,6 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 	public double calculateBlockContribution() {
 		double d = endTime.getArrayValue();
 		double logP = 0;
-		int n = tree.getLeafNodeCount();
 		Node [] nodes = tree.getNodesAsArray();
 		calcColourAtBase();
 		segments = collectSegments();
