@@ -130,7 +130,13 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 		samplingHazard = samplingHazardInput.get();
 		transmissionHazard = transmissionHazardInput.get();
 
+		// TODO impose bounds of (0, 1] on the Cs parameter...
+		//  Cs = 1.0 will need special handling
 		Cs = samplingHazard.constantInput.get().getArrayValue();
+		Log.debug("Recovered Cs from input as: " + Cs + " -- Now replacing input to 1.0");
+		samplingHazard.constantInput.set(new Constant("1.0"));
+		Log.debug("Retreiving new sH constant value: " + samplingHazard.constantInput.get().getArrayValue());
+
 		Ctr = transmissionHazard.constantInput.get().getArrayValue();
 		atr = transmissionHazard.shapeInput.get().getArrayValue();
 		btr = transmissionHazard.getRate();
@@ -299,7 +305,11 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 			SegmentIntervalList intervals = segments.get(i);
 			double start = intervals.birthTime;
 			double end = intervals.times.get(0);
-			logP1 += logh_s(start, end) + logS_s(start, end);
+			// logP1 += logh_s(start, end) + logS_s(start, end);
+
+			// CC: here we need to use log(Cs) + logh_s(start,end) + logS_s(start,end) with the NEW h_s and S_s
+			logP1 += Math.log(Cs) + logh_s(start, end) + logS_s(start, end);
+
 			// contribution of causing infections
 			if (allowTransmissionsAfterSampling) {
 				logP1 +=  logS_tr(start, d); // further contribution below
@@ -344,7 +354,11 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 				SegmentIntervalList intervals = segments.get(i);
 				if (intervals != null) {
 					double start = intervals.birthTime;
-					Double logP1 = logS_s(start, d);
+					// Double logP1 = logS_s(start, d);
+
+					// CC: here we need log(1-Cs) alone. i don't think we need the S_s term
+					Double logP1 = Math.log(1 - Cs);
+
 					// contribution of causing infections
 					logP += logS_tr(start, d); // further contribution below
 					logP -= logGetIndivCondition(p0, start, d);
@@ -1027,7 +1041,11 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 	}
 
 	public double logGetIndivCondition(double p0, double t, double d) {
-		final double TT = 1 - FastMath.exp(logS_tr(t, d)*(1-p0) + logS_s(t, d));
+		// final double TT = 1 - FastMath.exp(logS_tr(t, d)*(1-p0) + logS_s(t, d));
+
+		// CC: this should change to 1 - ( Cs* Ss + (1-Cs) Str^(1-p0) ) (I have not taken a log)
+		final double TT = 1 - ( Cs * FastMath.exp(logS_s(t, d)) + (1-Cs) * Math.pow(FastMath.exp(logS_tr(t, d)), (1-p0)) );
+
 		if (TT == 0) {
 			// something is wrong -- make sure the likelihood becomes NEGATIVE_INFINITY by returning POSITIVE_INFINITY
 			return Double.POSITIVE_INFINITY;
@@ -1049,7 +1067,10 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
 	}
 
 	private double getRho(double phi) {
-		return (1 - FastMath.exp(logS_tr(100, 0)*phi + logS_s(100, 0)));
+		// return (1 - FastMath.exp(logS_tr(100, 0)*phi + logS_s(100, 0)));
+
+		// CC: this must change. rho = 1 - (1-Cs)* Str(infinity)^phi
+		return (1 - (1-Cs) *  Math.pow(FastMath.exp(logS_tr(100, 0)), phi));
 	}
 
 	final static double tol2=1e-7;
