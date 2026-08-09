@@ -18,7 +18,6 @@ import beast.base.core.Function;
 import beast.base.core.Input;
 import beast.base.core.Input.Validate;
 import beast.base.core.Log;
-import beast.base.core.Function.Constant;
 import beast.base.evolution.tree.IntervalList;
 import beast.base.evolution.tree.IntervalType;
 import beast.base.evolution.tree.Node;
@@ -138,6 +137,10 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
         transmissionHazard = transmissionHazardInput.get();
 
         Cs = samplingHazard.constantInput.get().getArrayValue();
+        if (samplingConstantInput.get() != null) {
+        	double q = samplingConstantInput.get().getArrayValue();
+        	Cs = -Math.log(1-q);
+        }
         Ctr = transmissionHazard.constantInput.get().getArrayValue();
         atr = transmissionHazard.shapeInput.get().getArrayValue();
         btr = transmissionHazard.getRate();
@@ -302,6 +305,9 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
                 logP1 +=  logS_tr(start, d); // further contribution below
             } else {
                 logP1 +=  logS_tr(start, end); // further contribution below
+                if (end < nodes[i].getHeight()) {
+                	return Double.NEGATIVE_INFINITY;
+                }
             }
             logP1 -= logGetIndivCondition(p0, start, d);
             if (Double.isInfinite(logP1) && logP1 > 0) {
@@ -1166,6 +1172,9 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
                 logP1 +=  logS_tr(start, d); // further contribution below
             } else {
                 logP1 +=  logS_tr(start, end); // further contribution below
+                if (end < nodes[i].getHeight()) {
+                	return Double.NEGATIVE_INFINITY;
+                }
             }
             logP1 -= logGetIndivCondition(p0, start, d);
             if (Double.isInfinite(logP1) && logP1 > 0) {
