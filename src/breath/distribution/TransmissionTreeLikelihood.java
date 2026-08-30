@@ -3,6 +3,7 @@ package breath.distribution;
 
 
 
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -60,6 +61,7 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
             + "If false, no onwards transmissions are allowed (not clear how this affects the unknown unknowns though).", false);
 
     final public Input<Double> branchLengthThresholdInput = new Input<>("branchLengthThreshold", "minimal branch length for which penalty applies (to prevent very samll branch lengths)", 1e-4);
+    final public Input<Boolean> noRightTruncationInput = new Input<>("noRightTruncation", "flag for indication no Right Truncation should be used. If False, right truncation is assumed.", false);
 
 
     protected Tree tree;
@@ -257,7 +259,12 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
             logP += calculateCoalescent();
         }
 
-        logP += calcTransmissionLikelihood();
+        if (noRightTruncationInput.get()) {
+        	logP += calcTransmissionLikelihoodNoRT();
+        } else {
+        	logP += calcTransmissionLikelihood();
+        }
+        
         if (Double.isInfinite(logP)) {
             logP = Double.NEGATIVE_INFINITY;
         }
@@ -393,6 +400,128 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
         return logP;
     }
 
+    
+    public double calcTransmissionLikelihoodNoRT() {
+        double d = endTime.getArrayValue();
+        double logP = 0;
+        int n = tree.getLeafNodeCount();
+        Node [] nodes = tree.getNodesAsArray();
+        if (segments == null) {
+            segments = collectSegments();
+        }
+
+        if (origin != null) {
+            if (origin.getArrayValue() < tree.getRoot().getHeight()) {
+                return Double.NEGATIVE_INFINITY;
+            }
+        }
+
+//System.err.println("\n#contribution of sampled cases");
+        // contribution of sampled cases
+        for (int i = 0; i < n; i++) {
+//System.err.println("#node " + (i+1));
+            double logP1 = 0;
+            // contribution of not being sampled
+            SegmentIntervalList intervals = segments.get(i);
+            double start = intervals.birthTime;
+            double end = intervals.times.get(0);
+            logP1 += logh_s(start, end) + logS_s(start, end);
+            // contribution of causing infections
+            if (allowTransmissionsAfterSampling) {
+                logP1 +=  logS_tr(start, d) * (1-p0); // CC: NOTE CHANGE here for the no RT case
+            } else {
+                logP1 +=  logS_tr(start, end)* (1-p0); // CC: NOTE CHANGE here for the no RT case
+                if (end < nodes[i].getHeight()) {
+                	return Double.NEGATIVE_INFINITY;
+                }
+            }
+            logP1 -= logGetIndivCondition(p0, start, d);
+            if (Double.isInfinite(logP1) && logP1 > 0) {
+                System.err.println("Numerical instability encountered: ");
+                System.err.println(start + " " + d + " " + end + " " + p0);
+                System.err.println(logS_tr(start, d));
+                System.err.println(logS_tr(start, end));
+                System.err.println(logGetIndivCondition(p0, start, d));
+            }
+//System.err.println("#node " + (i+1) + " " + logP1);
+            logP += logP1;
+        }
+
+//System.err.println("\n#transmissions from sampled cases");
+        // further contribution of causing infections
+        for (int i = 0; i < tree.getNodeCount() - 1; i++) {
+            int baseColour = colourAtBase[i];
+            int parent = nodes[i].getParent().getNr();
+            int parentColour = colourAtBase[parent];
+            if (baseColour != parentColour && parentColour < n) {
+//System.err.println("#node " + (i+1));
+                double tInf0 = segments.get(parentColour).birthTime;
+                Node node = nodes[i];
+                double tInf1 = node.getHeight() + node.getLength() * blockEndFraction.getArrayValue(node.getNr());
+                double logP1 = logh_tr(tInf0, tInf1) + FastMath.log(1-p0); // CC: NOTE CHANGE here for no RT version 
+                logP += logP1;
+            }
+        }
+
+//System.err.println("\n#contribution of unsampled cases");
+        // contribution of unsampled cases
+   
+	// CC: note the change for no RT. WIthout RT, we don't need the end time in the surv functions
+	// so I have changed this block accordingly 
+        for (int i = n; i < tree.getNodeCount(); i++) {
+            if (colourAtBase[i] >= n) {
+                // contribution of not being sampled
+                SegmentIntervalList intervals = segments.get(i);
+                if (intervals != null) {
+                    double start = intervals.birthTime;
+                    // CC: no RT means that the window is infinite, so logS_s(start, infinity) = -Cs
+                    Double logP1 = -Cs;
+                    // contribution of causing infections
+                    // CC: no RT means that logS_tr(start, infinity) = -Ctr, times (1-p0) for ATTS only
+                    logP += -Ctr * (1-p0);
+                    logP -= logGetIndivCondition(p0, start, d);
+                    logP += logP1;
+                }
+            }
+        }	
+
+        for (int i = 0; i < tree.getNodeCount() - 1; i++) {
+            int baseColour = colourAtBase[i];
+            int parent = nodes[i].getParent().getNr();
+            int parentColour = colourAtBase[parent];
+            if (baseColour != parentColour && parentColour >= n) {
+
+                double tInf0 = segments.get(parentColour).birthTime;
+                Node node = nodes[i];
+                double tInf1 = node.getHeight() + node.getLength() * blockEndFraction.getArrayValue(node.getNr());
+                double logP1 = logh_tr(tInf0, tInf1) + FastMath.log(1-p0); // CC: note change for no RT version 
+                logP += logP1;
+            }
+        }
+        // contribution of cases in blocks
+        for (int i = 0; i < tree.getNodeCount() - 1; i++) {
+            if (blockCount.getValue(i) > 0) {
+                double branchlength = nodes[i].getLength();
+                double start = nodes[i].getHeight() + branchlength * blockStartFraction.getValue(i);
+                double end   = nodes[i].getHeight() + branchlength * blockEndFraction.getValue(i);
+                int blocks = blockCount.getValue(i);
+
+                double logPBlock = getLogBlockLikeNoRT(end - start, blocks, end - d);
+
+//    			System.err.println("#node " + (i+1) + " " + logPBlock);
+//    			System.err.println((tree.getRoot().getHeight() - end) + " - " + (tree.getRoot().getHeight() - start) + " = " + tau + " logPBlock=" + logPBlock);    			
+
+                logP += logPBlock;
+            } else  if (colourAtBase[i] != colourAtBase[nodes[i].getParent().getNr()]) {
+                // blockCount[i] == 0 but parent colour differs from base colour
+                // TODO: confirm there is no contribution ???
+            }
+        }
+
+        return logP;
+    }
+    
+    
     private double logS_tr(double t, double d) {
         return transmissionHazard.logS(tree.getRoot().getHeight() - d, tree.getRoot().getHeight() - t);
         // return transmissionHazard.logS(t, d);
@@ -1124,6 +1253,22 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
         return logBlockLike;
     }
 
+    protected double getLogBlockLikeNoRT(double tblock, int n, double Yr) {
+        // double blockLike = FastMath.pow(1-rho,n) * dgamma(tblock, n*atr, 1/btr) / getBlockCondition(p0,rho, atr, 1/btr, Yr);
+        //double blockLike = FastMath.pow(1-rho,n-1.0) * dgamma(tblock, n*atr, btr) / pgamma(Yr, n*atr, btr);
+        
+        double blockLike = (FastMath.pow(1-rho, n) / Pone) * dgamma(tblock, n*atr, btr) ; // CC: no RT means no pgamma term here 
+ 
+        // (REGULAR RT one) double blockLike = (FastMath.pow(1-rho, n) / Pone) * dgamma(tblock, n*atr, btr) / pgamma(Yr, n*atr, btr);
+        //double blockLike = FastMath.pow(1-rho,n-0.5) * dgamma(tblock, n*atr, btr) / pgamma(Yr, n*atr, btr);
+        //	    double blockLike = (1-FastMath.pow(rho,n)) * dgamma(tblock, n*a, b) / getBlockCondition(p0,rho, a, b, Yr);
+        double logBlockLike = FastMath.log(blockLike);
+//	    System.err.println("blockLike(" +tblock+"," + n +"," + Yr+") = " + blockLike);
+        return logBlockLike;
+    }
+    
+    
+    
     // gives the density
     static double dgamma(double x, double alpha, double rate) {
         if (x < 0) {
@@ -1146,6 +1291,9 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
     }
 
     public double calculateSampledHostContribution() {
+    	if (noRightTruncationInput.get()) {
+    		return calculateSampledHostContributionNoRT();
+    	}
         double d = endTime.getArrayValue();
         double logP = 0;
         int n = tree.getLeafNodeCount();
@@ -1205,6 +1353,9 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
     }
 
     public double calculateUnsampledHostContribution() {
+    	if (noRightTruncationInput.get()) {
+    		return calculateUnsampledHostContributionNoRT();
+    	}
         double d = endTime.getArrayValue();
         double logP = 0;
         int n = tree.getLeafNodeCount();
@@ -1253,6 +1404,9 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
     }
 
     public double calculateBlockContribution() {
+    	if (noRightTruncationInput.get()) {
+    		return calculateBlockContributionNoRT();
+    	}
         double d = endTime.getArrayValue();
         double logP = 0;
         int n = tree.getLeafNodeCount();
@@ -1275,6 +1429,149 @@ public class TransmissionTreeLikelihood extends TreeDistribution {
                 int blocks = blockCount.getValue(i);
 
                 double logPBlock = getLogBlockLike(end - start, blocks, end - d);
+
+                logP += logPBlock;
+            } else  if (colourAtBase[i] != colourAtBase[nodes[i].getParent().getNr()]) {
+                // blockCount[i] == 0 but parent colour differs from base colour
+                // TODO: confirm there is no contribution ???
+            }
+        }
+
+        return logP;
+    }
+
+    
+    
+    public double calculateSampledHostContributionNoRT() {
+        double d = endTime.getArrayValue();
+        double logP = 0;
+        int n = tree.getLeafNodeCount();
+        Node [] nodes = tree.getNodesAsArray();
+        calcColourAtBase();
+        segments = collectSegments();
+
+        if (origin != null) {
+            if (origin.getArrayValue() < tree.getRoot().getHeight()) {
+                return Double.NEGATIVE_INFINITY;
+            }
+        }
+
+        // contribution of sampled cases
+        for (int i = 0; i < n; i++) {
+            double logP1 = 0;
+            // contribution of not being sampled
+            SegmentIntervalList intervals = segments.get(i);
+            double start = intervals.birthTime;
+            double end = intervals.times.get(0);
+            logP1 += logh_s(start, end) + logS_s(start, end);
+            // contribution of causing infections
+            if (allowTransmissionsAfterSampling) {
+                logP1 +=  logS_tr(start, d) * (1-p0); // CC: mirroring above change 
+            } else {
+                logP1 +=  logS_tr(start, end) * (1-p0); // further contribution below
+                if (end < nodes[i].getHeight()) {
+                	return Double.NEGATIVE_INFINITY;
+                }
+            }
+            logP1 -= logGetIndivCondition(p0, start, d);
+            if (Double.isInfinite(logP1) && logP1 > 0) {
+                System.err.println("Numerical instability encountered: ");
+                System.err.println(start + " " + d + " " + end + " " + p0);
+                System.err.println(logS_tr(start, d));
+                System.err.println(logS_tr(start, end));
+                System.err.println(logGetIndivCondition(p0, start, d));
+            }
+            logP += logP1;
+        }
+
+        // further contribution of causing infections
+        for (int i = 0; i < tree.getNodeCount() - 1; i++) {
+            int baseColour = colourAtBase[i];
+            int parent = nodes[i].getParent().getNr();
+            int parentColour = colourAtBase[parent];
+            if (baseColour != parentColour && parentColour < n) {
+                double tInf0 = segments.get(parentColour).birthTime;
+                Node node = nodes[i];
+                double tInf1 = node.getHeight() + node.getLength() * blockEndFraction.getArrayValue(node.getNr());
+                double logP1 = logh_tr(tInf0, tInf1) + FastMath.log(1-p0); // CC: note change for no RT version
+                logP += logP1;
+            }
+        }
+
+        return logP;
+    }
+
+    public double calculateUnsampledHostContributionNoRT() {
+        double d = endTime.getArrayValue();
+        double logP = 0;
+        int n = tree.getLeafNodeCount();
+        Node [] nodes = tree.getNodesAsArray();
+        calcColourAtBase();
+        segments = collectSegments();
+
+        if (origin != null) {
+            if (origin.getArrayValue() < tree.getRoot().getHeight()) {
+                return Double.NEGATIVE_INFINITY;
+            }
+        }
+
+        // contribution of unsampled cases
+        for (int i = n; i < tree.getNodeCount(); i++) {
+            if (colourAtBase[i] >= n) {
+                // contribution of not being sampled
+                SegmentIntervalList intervals = segments.get(i);
+                if (intervals != null) {
+                    double start = intervals.birthTime;
+                    Double logP1 = logS_s(start, d);
+                    // contribution of causing infections
+                    logP += logS_tr(start, d)  * (1-p0); // CC: changed here to mirror above
+                    logP -= logGetIndivCondition(p0, start, d);
+
+                    logP += logP1;
+                }
+            }
+        }
+
+        // further contribution of causing infections
+        for (int i = 0; i < tree.getNodeCount() - 1; i++) {
+            int baseColour = colourAtBase[i];
+            int parent = nodes[i].getParent().getNr();
+            int parentColour = colourAtBase[parent];
+            if (baseColour != parentColour && parentColour >= n) {
+
+                double tInf0 = segments.get(parentColour).birthTime;
+                Node node = nodes[i];
+                double tInf1 = node.getHeight() + node.getLength() * blockEndFraction.getArrayValue(node.getNr());
+                double logP1 = logh_tr(tInf0, tInf1) + FastMath.log(1-p0);
+                logP += logP1;
+            }
+        }
+        return logP;
+    }
+
+    public double calculateBlockContributionNoRT() {
+        double d = endTime.getArrayValue();
+        double logP = 0;
+        int n = tree.getLeafNodeCount();
+        Node [] nodes = tree.getNodesAsArray();
+        calcColourAtBase();
+        segments = collectSegments();
+
+        if (origin != null) {
+            if (origin.getArrayValue() < tree.getRoot().getHeight()) {
+                return Double.NEGATIVE_INFINITY;
+            }
+        }
+
+        // contribution of cases in blocks
+        for (int i = 0; i < tree.getNodeCount() - 1; i++) {
+            if (blockCount.getValue(i) > 0) {
+                double branchlength = nodes[i].getLength();
+                double start = nodes[i].getHeight() + branchlength * blockStartFraction.getValue(i);
+                double end   = nodes[i].getHeight() + branchlength * blockEndFraction.getValue(i);
+                int blocks = blockCount.getValue(i);
+
+                double logPBlock = getLogBlockLikeNoRT(end - start, blocks, end - d);
 
                 logP += logPBlock;
             } else  if (colourAtBase[i] != colourAtBase[nodes[i].getParent().getNr()]) {
